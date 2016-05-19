@@ -273,10 +273,10 @@ class AwsController extends Controller
         }
     }
     /*
-    Name: upload_tailgate_image
+    Name: upload_image
     Description: uploads tailgate image to amazon s3
     */
-	public function upload_tailgate_image($image=false,$folder=false){
+	public function upload_image($image=false,$folder=false){
 		if($image!==false && $folder!==false){
 			$sharedConfig = [
 			    'region'  => 'us-east-1',
@@ -328,7 +328,7 @@ class AwsController extends Controller
 		}
 	}
 
-	//i definitely could have combined this with upload_tailgate_image, to just have one function do both
+	//i definitely could have combined this with upload_image, to just have one function do both
 	//but I dont feel good today and am just being lazy for once.
 	public function upload_venue_image($url = false){
 		if($url!==false && $url!==''){
@@ -380,36 +380,6 @@ class AwsController extends Controller
 			}catch (S3Exception $e) {
 				return false;
 			}
-		}
-		else{
-			return false;
-		}
-	}
-	/*
-    Name: upload_user_game_image
-    Description: uploads game image to amazon s3
-    */
-	public function upload_user_game_image($image=false,$folder=false){
-		if($image!==false && $folder!==false){
-			$sharedConfig = [
-			    'region'  => 'us-east-1',
-			    'version' => 'latest'
-			];
-			$client = S3Client::factory($sharedConfig);
-			$imageFileName = $this->getGUID() . '.' . $image->getClientOriginalExtension();
-			$imageFilePath = $image->getPathName();
-			$contentType = $image->getMimeType();
-			try {
-				$result = $client->putObject(array(
-				    'Bucket'     => 'fanvaultapp',
-				    'Key'        => $folder.'/'.$imageFileName,
-				    'SourceFile' => $imageFilePath,
-				    'ContentType'=>$contentType
-				));
-				return $result['ObjectURL'];
-			}catch (S3Exception $e) {
-				return false;
-			}	
 		}
 		else{
 			return false;

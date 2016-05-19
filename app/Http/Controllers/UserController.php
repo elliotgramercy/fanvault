@@ -14,6 +14,7 @@ use App\Venue;
 use App\Tailgate;
 
 use App\Http\Controllers\UserDeviceController as UserDeviceController;
+use App\Http\Controllers\AwsController as AwsController;
 
 class UserController extends Controller
 {
@@ -136,7 +137,7 @@ class UserController extends Controller
                     $photo_url = $request->input('photo');
                     if(isset($photo_image)){
                         $photo = $request->file('photo');
-                        $uploaded_image_url = $aws_controller->upload_tailgate_image($photo,'users');
+                        $uploaded_image_url = $aws_controller->upload_image($photo,'users');
                         if($uploaded_image_url !== false){
                             $cur->photo = $uploaded_image_url;
                             $msg[] = 'Photo file was successfully uploaded to AWS S3.';
@@ -373,6 +374,10 @@ class UserController extends Controller
         $game_obj = Game::with('home_team','away_team','venue','tailgates')->with(['attendees'=>function($q) use ($all_friend_ids){
             return $q->whereIn('user_id',$all_friend_ids);
         }])->with(['ticket'=>function($q) use ($user_id){
+            return $q->where('user_id',$user_id);
+        }])->with(['user_game_images'=>function($q) use ($user_id){
+            return $q->where('user_id',$user_id);
+        }])->with(['user_game_crew_members'=>function($q) use ($user_id){
             return $q->where('user_id',$user_id);
         }])->where('id',$game_id)->first();
         $ret = array(

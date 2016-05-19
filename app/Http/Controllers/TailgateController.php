@@ -138,7 +138,7 @@ class TailgateController extends Controller
                 }
                 $photo = $request->file('photo');
                 if(isset($photo)){
-                    $uploaded_image_url = $aws_controller->upload_tailgate_image($photo,'tailgates');
+                    $uploaded_image_url = $aws_controller->upload_image($photo,'tailgates');
                     if($uploaded_image_url !== false){
                         $cur->photo = $uploaded_image_url;
                     }

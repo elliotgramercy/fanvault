@@ -32,4 +32,12 @@ class Game extends Model
     public function ticket(){
         return $this->hasOne('App\Ticket');
     }
+
+    public function user_game_images(){
+        return $this->hasMany('App\UserGameImage');
+    }
+
+    public function user_game_crew_members(){
+        return $this->hasMany('App\UserGameCrew');
+    }
 }

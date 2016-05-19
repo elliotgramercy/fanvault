@@ -65,6 +65,13 @@ Route::group(['middleware' => ['web']], function () {
 	Route::post('users/add_tailgate_attendee', 'TailgatesAttendeeController@add_tailgate_attendee');
 	Route::post('users/get_game_for_user', 'UserController@get_game_for_user');
 	Route::post('users/search', 'UserController@search');
+	Route::post('users/user_game_images/update', 'UserGameImageController@update');
+	Route::post('users/user_game_images/delete', 'UserGameImageController@delete');
+	Route::post('users/user_game_images/get_users_images_for_game', 'UserGameImageController@get_users_images_for_game');
+	Route::post('users/user_game_images/get_all_game_images', 'UserGameImageController@get_all_game_images');
+	Route::post('users/user_game_crew/update', 'UserGameCrewController@update');
+	Route::post('users/user_game_crew/get_user_crew_members_for_game', 'UserGameCrewController@get_user_crew_members_for_game');
+	Route::post('users/user_game_crew/delete', 'UserGameCrewController@delete');
 
 	//FRIENDS
 	Route::post('users/make_friends', 'FriendController@make_friends');
