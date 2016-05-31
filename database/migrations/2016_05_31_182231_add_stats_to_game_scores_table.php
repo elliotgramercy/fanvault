@@ -33,7 +33,12 @@ class AddStatsToGameScoresTable extends Migration
     {
         if(Schema::hasTable('games_scores')){
             Schema::table('games_scores', function ($table) {
-                $table->dropColumn('status');
+                $table->dropColumn('team_lob');
+                $table->dropColumn('slg');
+                $table->dropColumn('obp');
+                $table->dropColumn('avg');
+                $table->dropColumn('fpct');
+                $table->dropColumn('officials');
             });
         }
     }
