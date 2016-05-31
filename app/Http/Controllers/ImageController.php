@@ -116,6 +116,7 @@ class ImageController extends Controller
     */
     public function updateActionImages(){
         $srapi = env('SPORTS_RADAR_LIVE_IMAGES_TRIAL_KEY');
+        $c = 0;
         for($i=7;$i>=0;$i--){
             $date = gmdate('Y-m-d',strtotime("-{$i} days"));
             try{
@@ -125,7 +126,6 @@ class ImageController extends Controller
             }
             $return = json_decode(json_encode(simplexml_load_string($return, 'SimpleXMLElement', LIBXML_NOCDATA)),true);
             $assets = $return['asset'];
-            $c = 0;
             $num_of_teams = Team::count();
             foreach($assets as $asset){
                 $id = $asset['@attributes']['id'];
@@ -162,7 +162,10 @@ class ImageController extends Controller
                 elseif($location == 'Rangers Ballpark in Arlington'){
                     $location = 'Globe Life Park in Arlington';
                 }
-                $venue = Venue::where('name',$location)->first();  //now we have the venue_id
+                if($location == ''){
+                    continue;
+                }
+                $venue = Venue::where('name',$location)->orWhere('name', 'like', '%'.$location.'%')->first();  //now we have the venue_id
                 if(is_null($venue)){
                     //if stadium match not found then move on.
                     continue;
@@ -202,7 +205,7 @@ class ImageController extends Controller
             sleep(1);
         } 
         $ret = array(
-          "success"=>false,
+          "success"=>true,
           "rows_created"=>$c
         );
         die(json_encode($ret));       

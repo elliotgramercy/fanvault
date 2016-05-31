@@ -8,6 +8,8 @@ use App\Http\Requests;
 
 use App\Venue;
 use App\Image;
+use App\Game;
+use App\Team;
 
 class VenueController extends Controller
 {
@@ -45,7 +47,61 @@ class VenueController extends Controller
     		die(json_encode($ret));
     	}        
     }
-
+    /*
+    Name: get_upcoming_games_for_venue
+    Description: Returns all upcoming games scheduled at the given venue for the given month. If no month is given, it will show current month.
+    Parameters: (required) venue_id - existing venue id
+    			(required) date - date format ('Y-m') or ('Y-m-d'). It will get first day for month given.;
+    Returns: (str) ret - JSON object containing the data.
+    */
+    public function get_upcoming_games_for_venue(Request $request){
+    	$venue_id = $request->input("venue_id");
+        if(!isset($venue_id) || $venue_id === ''){
+            $ret = array(
+              "success"=>false,
+              "msg"=>'The venue_id was not recieved.'
+            );
+            die(json_encode($ret));
+        }
+        $cur_venue = Venue::with('venue_image')->where('id',$venue_id)->first();
+        if(is_null($cur_venue)){  //user not found
+            $ret = array(
+              "success"=>false,
+              "msg"=>"The venue_id ({$venue_id}) provided was not found in the database."
+            );
+            die(json_encode($ret));
+        }
+        $date = $request->input("date");
+        if(!isset($date) || $date === ''){
+        	$start_of_month = gmdate('Y-m-d H:i:s',strtotime( 'first day of ' . date( 'F Y')));
+        	$end_of_month = gmdate('Y-m-d H:i:s',strtotime( 'last day of ' . date( 'F Y')));
+        }
+        else{
+        	if(!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/",$date) && !preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])$/",$date)){
+    			$ret = array(
+	              "success"=>false,
+	              "msg"=>'The date submitted () was invalid. Must be (yyyy-mm-dd or yyyy-mm).'
+	            );
+	            die(json_encode($ret));
+        	}
+        	$start_of_month = gmdate('Y-m-d H:i:s',strtotime( 'first day of ' . $date));
+        	$end_of_month = gmdate('Y-m-d H:i:s',strtotime( 'last day of ' . $date));
+        }
+        $the_games = Game::with('home_team_no_players','away_team_no_players')->where('venue_id',$cur_venue->id)->where('scheduled','>',$start_of_month)->where('scheduled','<',$end_of_month)->get()->toArray();
+        foreach($the_games as &$game){
+            $game['home_team'] = $game['home_team_no_players'];
+            unset($game['home_team_no_players']);
+            $game['away_team'] = $game['away_team_no_players'];
+            unset($game['away_team_no_players']);
+        }
+        $cur_venue->upcoming_games = $the_games;
+        $ret = array(
+          "success"=>true,
+          "venue"=>$cur_venue
+        );
+        die(json_encode($ret));
+        
+    }
     /*
     Name: getAll
     Description: Returns all venue records in database. Now returns venue images as well.
@@ -86,17 +142,28 @@ class VenueController extends Controller
 				//create new
 				$curvenue = new Venue;
 			}
+            $full_address = array();
 			if(isset($venue->id)){$curvenue->sr_venue_id = $venue->id;}
-			if(isset($venue->name)){$curvenue->name = $venue->name;}
+			if(isset($venue->name)){$curvenue->name = $venue->name;$full_address[]=$venue->name;}
 			if(isset($venue->market)){$curvenue->market = $venue->market;}
 			if(isset($venue->capacity)){$curvenue->capacity = $venue->capacity;}
 			if(isset($venue->surface)){$curvenue->surface = $venue->surface;}
-			if(isset($venue->address)){$curvenue->address = $venue->address;}
-			if(isset($venue->city)){$curvenue->city = $venue->city;}
-			if(isset($venue->state)){$curvenue->state = $venue->state;}
-			if(isset($venue->zip)){$curvenue->zip = $venue->zip;}
-			if(isset($venue->country)){$curvenue->country = $venue->country;}
+			if(isset($venue->address)){$curvenue->address = $venue->address;$full_address[]=$venue->address;}
+			if(isset($venue->city)){$curvenue->city = $venue->city;$full_address[]=$venue->city;}
+			if(isset($venue->state)){$curvenue->state = $venue->state;$full_address[]=$venue->state;}
+			if(isset($venue->zip)){$curvenue->zip = $venue->zip;$full_address[]=$venue->zip;}
+			if(isset($venue->country)){$curvenue->country = $venue->country;$full_address[]=$venue->country;}
 			if(isset($venue->distances)){$curvenue->distances = json_encode($venue->distances);}
+            //now that we have the whole address lets get the lat lng coords.
+            $full_address = urlencode(implode('+',$full_address));
+            $geocode=file_get_contents("https://maps.google.com/maps/api/geocode/json?sensor=false&address=".$full_address."&key=AIzaSyD47rUsh__IXvHO-cgiRCPGBrtJ94bZP6g");
+            $output= json_decode($geocode);
+            if(isset($output->results[0]->geometry->location->lat)){
+                $lat = $output->results[0]->geometry->location->lat;
+                $lng = $output->results[0]->geometry->location->lng;
+                $curvenue->lat = $lat;
+                $curvenue->lng = $lng;
+            }
 			$saved = $curvenue->save();
 			if($saved){
 				$rows_updated ++;

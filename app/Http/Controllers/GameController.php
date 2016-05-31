@@ -7,6 +7,9 @@ use Illuminate\Http\Request;
 use App\Venue;
 use App\Team;
 use App\Game;
+use App\GamesLineup;
+use App\Player;
+use App\GamesScore;
 
 use App\Http\Requests;
 
@@ -98,6 +101,7 @@ class GameController extends Controller
 		$games = $season->games;
 		$rows_updated = 0;
 		$rows_created = 0;
+		$game_score_rows_updated = 0;
 		foreach($games as $game){
 			$game_sr_id = $game->id;
 			$existing = Game::where('sr_game_id', $game_sr_id);
@@ -126,11 +130,9 @@ class GameController extends Controller
 			if(isset($game->scheduled)){$curGame->scheduled = $game->scheduled;}
 			if($game->home_team){
 				$sr_home_team_id = $game->home_team;
-				$existing = Team::where('sr_team_id', $sr_home_team_id);
-				if($existing->count() > 0){
-					$existing = $existing->first();
-					$existing_id = $existing->id;
-					$curGame->home_team_id = $existing_id;
+				$existing = Team::where('sr_team_id', $sr_home_team_id)->first();
+				if(!is_null($existing)){
+					$curGame->home_team_id = $existing->id;
 				}
 				else{
 					continue;
@@ -138,11 +140,9 @@ class GameController extends Controller
 			}
 			if($game->away_team){
 				$sr_away_team_id = $game->away_team;
-				$existing = Team::where('sr_team_id', $sr_away_team_id);
-				if($existing->count() > 0){
-					$existing = $existing->first();
-					$existing_id = $existing->id;
-					$curGame->away_team_id = $existing_id;
+				$existing = Team::where('sr_team_id', $sr_away_team_id)->first();
+				if(!is_null($existing)){
+					$curGame->away_team_id = $existing->id;
 				}
 				else{
 					continue;
@@ -163,14 +163,47 @@ class GameController extends Controller
 			} 
 			$saved = $curGame->save();
 			if($saved){
+				//now that we have saved the game, lets create a GamesScore record for this game too so that it
+				//exists at 0s.
+				$cur_games_home_score = GamesScore::where([
+					'game_id'=>$curGame->id,
+					'team_id'=>$curGame->home_team_id
+				])->first();
+				//only create new records, dont modify existing.
+				if(is_null($cur_games_home_score)){
+					//create nwe one
+					$cur_games_home_score = new GamesScore;
+					$cur_games_home_score->game_id = $curGame->id;
+					$cur_games_home_score->team_id = $curGame->home_team_id;
+					$saved = $cur_games_home_score->save();
+					if($saved){
+						$game_score_rows_updated++;
+					}
+				}
+				$cur_games_away_score = GamesScore::where([
+					'game_id'=>$curGame->id,
+					'team_id'=>$curGame->away_team_id
+				])->first();
+				//only create new records, dont modify existing.
+				if(is_null($cur_games_away_score)){
+					//create nwe one
+					$cur_games_away_score = new GamesScore;
+					$cur_games_away_score->game_id = $curGame->id;
+					$cur_games_away_score->team_id = $curGame->away_team_id;
+					$saved = $cur_games_away_score->save();
+					if($saved){
+						$game_score_rows_updated++;
+					}
+				}
 				$rows_updated ++;
 			}
 		}
 		$ret = array(
 			'rows_updated' => $rows_updated,
-			'rows_created' => $rows_created
+			'rows_created' => $rows_created,
+			'game_score_rows_updated'=>$game_score_rows_updated
 		);
-		die(json_encode($ret));
+		return json_encode($ret);
 	}
 	/*
     Name: updateAllScores
@@ -179,11 +212,11 @@ class GameController extends Controller
     Returns: (str) ret - JSON object containing the number of rows updated.
     Ex: {"rows_updated":31}
     */
+    /*no longer used we now use UpdateLineups
 	public function updateAllScores(){
 		$srapi = env('SPORTS_RADAR_API_KEY');
-		/*
 		$rows_updated = 0;
-		for($i = 50; $i>=0; $i--){
+		for($i = 8; $i>=0; $i--){
 			$now = strtotime("-{$i} days");
 			$year = gmdate('Y',$now);
 			$month = gmdate('m',$now);
@@ -196,6 +229,7 @@ class GameController extends Controller
 				if(is_null($cur_game)){continue;}
 				$cur_game->home_team_runs = $game->game->home->runs;
 				$cur_game->away_team_runs = $game->game->away->runs;
+				$cur_game->status = $game->game->status;
 				$saved = $cur_game->save();
 				if($saved){
 					$rows_updated++;
@@ -203,27 +237,129 @@ class GameController extends Controller
 			}
 			sleep(1);
 		}
-		die(json_encode(array('rows_updated' => $rows_updated))); 
-		*/
-		$now = strtotime('now');
-		$year = gmdate('Y',$now);
-		$month = gmdate('m',$now);
-		$day = gmdate('d',$now);
-		$return = file_get_contents("http://api.sportradar.us/mlb-p5/games/{$year}/{$month}/{$day}/boxscore.json?api_key={$srapi}");
-		$return = json_decode($return);
-		$games = $return->league->games;
-		$rows_updated = 0;
-		foreach($games as $game){
-			$cur_game = Game::where('sr_game_id',$game->game->id)->first();
-			if(is_null($cur_game)){continue;}
-			$cur_game->home_team_runs = $game->game->home->runs;
-			$cur_game->away_team_runs = $game->game->away->runs;
-			$cur_game->status = $game->game->status;
-			$saved = $cur_game->save();
-			if($saved){
-				$rows_updated++;
+		return json_encode(array('rows_updated' => $rows_updated)); 
+		// $now = strtotime('now');
+		// $year = gmdate('Y',$now);
+		// $month = gmdate('m',$now);
+		// $day = gmdate('d',$now);
+		// $return = file_get_contents("http://api.sportradar.us/mlb-p5/games/{$year}/{$month}/{$day}/boxscore.json?api_key={$srapi}");
+		// $return = json_decode($return);
+		// $games = $return->league->games;
+		// $rows_updated = 0;
+		// foreach($games as $game){
+		// 	$cur_game = Game::where('sr_game_id',$game->game->id)->first();
+		// 	if(is_null($cur_game)){continue;}
+		// 	$cur_game->home_team_runs = $game->game->home->runs;
+		// 	$cur_game->away_team_runs = $game->game->away->runs;
+		// 	$cur_game->status = $game->game->status;
+		// 	$saved = $cur_game->save();
+		// 	if($saved){
+		// 		$rows_updated++;
+		// 	}
+		// }
+		// die(json_encode(array('rows_updated' => $rows_updated))); 
+	}
+	
+	/*
+    Name: updateLineups
+    Description: Updates the lineups for the given +x days.. x=0 is today, x=1 is tomorrow.. x cannot exceed 3.
+    Parameters: 
+    	num - number of days in future to update.
+    Returns: (str) ret - JSON object containing the number of new rows created and rows updated.
+    Ex: {"rows_updated":31,"rows_created":2399}
+    */
+	public function updateLineups(){
+		$srapi = env('SPORTS_RADAR_API_KEY');
+		$positions_arr = array('P','C','1B','2B','3B','SS','LF','CF','RF','DH','PH','PR');
+		$lineup_rows_updated = 0;
+		$game_rows_updated = 0;
+		$game_score_rows_updated = 0;
+		for($i = 1; $i>=0; $i--){
+			$now = strtotime("-{$i} days");
+			$year = gmdate('Y',$now);
+			$month = gmdate('m',$now);
+			$day = gmdate('d',$now);
+			$return = file_get_contents("http://api.sportradar.us/mlb-p5/games/$year/$month/$day/summary.json?api_key={$srapi}");
+			$return = json_decode($return);
+			$games = $return->league->games;
+			foreach($games as $game){
+				$cur_game = Game::where('sr_game_id',$game->game->id)->first();
+				if(is_null($cur_game)){continue;}
+				$cur_game->home_team_runs = $game->game->home->runs;
+				$cur_game->away_team_runs = $game->game->away->runs;
+				$cur_game->status = $game->game->status;
+				$saved = $cur_game->save();
+				if($saved){
+					$game_rows_updated++;
+				}
+				$home_and_away = array('home','away');
+				foreach($home_and_away as $home_or_away){
+					//lets get the team_id
+					$cur_team = Team::where('sr_team_id',$game->game->$home_or_away->id)->first();
+					if(is_null($cur_team)){continue;}
+					//now we can update the lineups.
+					if(isset($game->game->$home_or_away->lineup)){
+						$lineups = $game->game->$home_or_away->lineup;
+						foreach($lineups as $lineup){
+							//lets get the player in this lineup.
+							$cur_player = Player::where('sr_player_id',$lineup->id)->first();
+							if(is_null($cur_player)){continue;}
+							//check if GamesLineup record exists.
+							$cur_lineup = GamesLineup::where([
+								'game_id'=>$cur_game->id,
+								'player_id'=>$cur_player->id,
+								'team_id'=>$cur_team->id
+							])->first();
+							if(is_null($cur_lineup)){
+								$cur_lineup = new GamesLineup;
+								$cur_lineup->game_id = $cur_game->id;
+								$cur_lineup->player_id = $cur_player->id;
+								$cur_lineup->team_id = $cur_team->id;
+							}
+							$cur_lineup->position_num = $lineup->position;
+							$cur_lineup->position = $positions_arr[$lineup->position - 1];
+							$lineup_saved = $cur_lineup->save();
+							if($lineup_saved){
+								$lineup_rows_updated++;
+							}
+						}
+					}
+					//now lets also update game_scores
+					//first lets get the GamesScore object for this particular team and game
+					$cur_games_score = GamesScore::where([
+						'game_id'=>$cur_game->id,
+						'team_id'=>$cur_team->id
+					])->first();
+					if(is_null($cur_games_score)){
+						//create nwe one
+						$cur_games_score = new GamesScore;
+						$cur_games_score->game_id = $cur_game->id;
+						$cur_games_score->team_id = $cur_team->id;
+					}
+					if(isset($game->game->$home_or_away->hits)){
+						$cur_games_score->hits = $game->game->$home_or_away->hits;
+					}
+					if(isset($game->game->$home_or_away->runs)){
+						$cur_games_score->runs = $game->game->$home_or_away->runs;
+					}	
+					if(isset($game->game->$home_or_away->errors)){
+						$cur_games_score->errors = $game->game->$home_or_away->errors;
+					}
+					if(isset($game->game->$home_or_away->scoring)){
+						$cur_games_score->inning_scores = $game->game->$home_or_away->scoring;
+					}
+					$game_score_saved = $cur_games_score->save();
+					if($game_score_saved){
+						$game_score_rows_updated++;
+					}
+				}
 			}
+			sleep(1);
 		}
-		die(json_encode(array('rows_updated' => $rows_updated))); 
+		return json_encode(array(
+			'game_rows_updated' => $game_rows_updated,
+			'lineup_rows_updated' => $lineup_rows_updated,
+			'game_score_rows_updated'=>$game_score_rows_updated
+		));
 	}
 }

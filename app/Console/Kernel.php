@@ -9,6 +9,8 @@ use App\Http\Controllers\ImageController as ImageController;
 use App\Http\Controllers\TeamController as TeamController;
 use App\Http\Controllers\GameController as GameController;
 
+use DB;
+
 class Kernel extends ConsoleKernel
 {
     /**
@@ -35,15 +37,37 @@ class Kernel extends ConsoleKernel
             $return = $image_controller->updateActionImages();
         })->weekly()->mondays()->at('3:00');
         */
-        //Update Team Wins and Losses daily at night.
-        $schedule->call(function () {
-            $team_controller = new TeamController;
-            $return = $team_controller->updateAllWonLost();
-        })->dailyAt('3:00');
+        //Update Team Wins and Losses every fifteen
         //Update game scores every 15 minutes
         $schedule->call(function () {
+            DB::table('temp_log')->insert(
+                ['value' => 'started 15min call: '.gmdate('Y-m-d H:i:s',strtotime('now'))]
+            );
+            $team_controller = new TeamController;
             $game_controller = new GameController;
-            $return = $game_controller->updateAllScores();
-        })->cron('*/15 * * * *');
+            $ret = $team_controller->updateAllWonLost();
+            sleep(1);
+            //updateLineups updates scores and lineups.
+            $ret2 = $game_controller->updateLineups();
+            DB::table('temp_log')->insert(
+                ['value' => 'ended 15min call: '.gmdate('Y-m-d H:i:s',strtotime('now')), 'value_2'=>$ret, 'value_3'=>$ret2]
+            );
+            $return = true;
+        })->cron('*/15 * * * * *');
+        
+        $schedule->call(function () {
+            DB::table('temp_log')->insert(
+                ['value' => 'started daily 1am call: '.gmdate('Y-m-d H:i:s',strtotime('now'))]
+            );
+            $game_controller = new GameController;
+            $team_controller = new TeamController;
+            $ret = $team_controller->updateTeamPlayers();
+            sleep(1);
+            $ret2 = $game_controller->updateAll();
+            DB::table('temp_log')->insert(
+                ['value' => 'ended daily 1am call: '.gmdate('Y-m-d H:i:s',strtotime('now')), 'value_2'=>$ret, 'value_3'=>$ret2]
+            );
+            $return = true;
+        })->dailyAt('1:00');
     }
 }

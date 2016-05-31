@@ -6,7 +6,8 @@ use Illuminate\Http\Request;
 use App\Team;
 use App\Venue;
 use App\Image;
-
+use App\Player;
+use App\GamesLineup;
 use App\Http\Requests;
 
 class TeamController extends Controller
@@ -123,7 +124,7 @@ class TeamController extends Controller
 			'rows_updated' => $rows_updated,
 			'rows_created' => $rows_created
 		);
-		die(json_encode($ret));
+		return json_encode($ret);
 	}
 
 	/*
@@ -170,7 +171,7 @@ class TeamController extends Controller
         		}
         	}
         }
-        die(json_encode(array('rows_updated' => $rows_updated)));
+        return json_encode(array('rows_updated' => $rows_updated));
     }
     /*
     Name: updateAllWonLost
@@ -201,6 +202,80 @@ class TeamController extends Controller
 				}
 			}
 		}
-		die(json_encode(array('rows_updated' => $rows_updated)));
+		return json_encode(array('rows_updated' => $rows_updated));
+	}
+	/*
+    Name: updateTeamPlayers
+    Description: Updates the teams player info and stats
+    Parameters: n/a
+    Returns: (str) ret - JSON object containing the number of new rows created and rows updated.
+    Ex: {"rows_created":7,"rows_updated":983}
+    */
+	public function updateTeamPlayers(){
+		$num = 1;
+		$srapi = env('SPORTS_RADAR_API_KEY');
+		$now = strtotime('now');
+		$year = gmdate('Y',$now);
+		//the first time I run this I am going to get ALL teams and update all players for all teams.
+		//however in the future I am only going to get teams that player today and update the player
+		//stats for only those teams since this will run daily.
+		$teams = Team::all();
+		//since this updates pretty fast (within 30 seconds) I am just going to let it update all team player stats daily.
+		$rows_updated = 0;
+		$rows_created = 0;
+		foreach($teams as $team){
+			$return = file_get_contents("http://api.sportradar.us/mlb-p5/seasontd/2016/REG/teams/{$team->sr_team_id}/statistics.json?api_key={$srapi}");
+			$return = json_decode($return);
+			$players = $return->players;
+			$player_ids = array();	//i am going to make an array of sr_player_ids to match against my database to remove old inactive players.
+			foreach($players as $player){
+				$new_player = false;
+				//lets check if player is already in the players table in the db, if he is then we will update if not then we will add one.
+				$cur = Player::where('sr_player_id',$player->id)->first();
+				if(is_null($cur)){
+					$cur = new Player;
+					$new_player = true;
+				}
+				$cur->team_id = $team->id;
+				$cur->sr_player_id = $player->id;
+				$cur->position = $player->position;
+				$cur->primary_position = $player->primary_position;
+				$cur->first_name = $player->first_name;
+				$cur->last_name = $player->last_name;
+				$cur->preferred_name = $player->preferred_name;
+				$cur->jersey_number = $player->jersey_number;
+				if(isset($player->statistics->pitching)){	//player has pitching stats
+					$cur->pitching_er = $player->statistics->pitching->runs->earned;
+					$cur->pitching_era = $player->statistics->pitching->era;
+					$cur->pitching_so = $player->statistics->pitching->outcome->ktotal;
+					$cur->pitching_bb = $player->statistics->pitching->onbase->bb;
+					$cur->pitching_h = $player->statistics->pitching->onbase->h;
+				}
+				if(isset($player->statistics->hitting)){	//player has hitting stats
+					$cur->hitting_h = $player->statistics->hitting->onbase->h;
+					$cur->hitting_bb = $player->statistics->hitting->onbase->bb;
+					$cur->hitting_so = $player->statistics->hitting->outcome->ktotal;
+					$cur->hitting_avg = $player->statistics->hitting->avg;
+					$cur->hitting_rbi = $player->statistics->hitting->rbi;
+				}
+				$saved = $cur->save();
+				$player_ids[] = $cur->sr_player_id;
+				if($saved){
+					if($new_player){
+						$rows_created++;
+					}
+					else{
+						$rows_updated++;
+					}
+				}
+			}
+			//now that we have all of the sr_player_ids for the team, so we update old records to inactive
+			$old_player_ids = Player::whereNotIn('sr_player_id',$player_ids)->where('team_id',$team->id)->update(['status' => 'I']);
+			sleep(1);
+		}
+		return json_encode(array(
+			'rows_created' => $rows_created,
+			'rows_updated' => $rows_updated
+		));
 	}
 }

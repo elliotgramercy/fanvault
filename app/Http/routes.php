@@ -19,31 +19,34 @@ Route::post('/', function () {
 
 
 Route::group(['middleware' => ['web']], function () {
-	Route::post('/', 'WelcomeController@showWelcome');
-	Route::post('auth/fb', 'SocialAuthController@redirectToProvider');
-	Route::post('auth/fb/returnFromProvider', 'SocialAuthController@returnFromProvider');
-	Route::post('auth/fb/getnonappfriends', 'SocialAuthController@getNonAppFriends');
-	Route::post('auth/fb/getappfriends', 'SocialAuthController@getAppFriends');
-	Route::post('auth/fb/getuser', 'SocialAuthController@getUser');
-	Route::post('auth/fb/getuserphoto', 'SocialAuthController@getUserPhoto');
-	Route::post('auth/fb/getuserevents', 'SocialAuthController@getUserEvents');
-	Route::post('auth/fb/getfriendsevents', 'SocialAuthController@getFriendsEvents');
+	// Route::post('/', 'WelcomeController@showWelcome');
+	// Route::post('auth/fb', 'SocialAuthController@redirectToProvider');
+	// Route::post('auth/fb/returnFromProvider', 'SocialAuthController@returnFromProvider');
+	// Route::post('auth/fb/getnonappfriends', 'SocialAuthController@getNonAppFriends');
+	// Route::post('auth/fb/getappfriends', 'SocialAuthController@getAppFriends');
+	// Route::post('auth/fb/getuser', 'SocialAuthController@getUser');
+	// Route::post('auth/fb/getuserphoto', 'SocialAuthController@getUserPhoto');
+	// Route::post('auth/fb/getuserevents', 'SocialAuthController@getUserEvents');
+	// Route::post('auth/fb/getfriendsevents', 'SocialAuthController@getFriendsEvents');
 	//Venues
 	Route::post('srapi/venues/getOneBy', 'VenueController@getOneBy');
 	Route::post('srapi/venues/getAll', 'VenueController@getAll');
 	Route::post('srapi/venues/updateAll', 'VenueController@updateAll');
+	Route::post('srapi/venues/get_upcoming_games_for_venue', 'VenueController@get_upcoming_games_for_venue');
 	//Teams
 	Route::post('srapi/teams/getOneBy', 'TeamController@getOneBy');
 	Route::post('srapi/teams/getAll', 'TeamController@getAll');
 	Route::post('srapi/teams/updateAll', 'TeamController@updateAll');
 	Route::post('srapi/teams/updateMLBcolors', 'TeamController@updateMLBcolors');
 	Route::post('srapi/teams/updateAllWonLost', 'TeamController@updateAllWonLost');
+	Route::post('srapi/teams/updateTeamPlayers', 'TeamController@updateTeamPlayers');
 	//Games
 	Route::post('srapi/games/getOneBy', 'GameController@getOneBy');
 	Route::post('srapi/games/getAll', 'GameController@getAll');
 	Route::post('srapi/games/getAllUpcoming', 'GameController@getAllUpcoming');
 	Route::post('srapi/games/updateAll', 'GameController@updateAll');
 	Route::post('srapi/games/updateAllScores', 'GameController@updateAllScores');
+	Route::post('srapi/games/updateLineups', 'GameController@updateLineups');
 
 	//IMAGES
 	Route::post('srapi/images/updateVenueImages', 'ImageController@updateVenueImages');
@@ -65,6 +68,7 @@ Route::group(['middleware' => ['web']], function () {
 	Route::post('users/add_tailgate_attendee', 'TailgatesAttendeeController@add_tailgate_attendee');
 	Route::post('users/get_game_for_user', 'UserController@get_game_for_user');
 	Route::post('users/search', 'UserController@search');
+	Route::post('users/search_type_ahead', 'UserController@search_type_ahead');
 	Route::post('users/user_game_images/update', 'UserGameImageController@update');
 	Route::post('users/user_game_images/delete', 'UserGameImageController@delete');
 	Route::post('users/user_game_images/get_users_images_for_game', 'UserGameImageController@get_users_images_for_game');
@@ -72,6 +76,10 @@ Route::group(['middleware' => ['web']], function () {
 	Route::post('users/user_game_crew/update', 'UserGameCrewController@update');
 	Route::post('users/user_game_crew/get_user_crew_members_for_game', 'UserGameCrewController@get_user_crew_members_for_game');
 	Route::post('users/user_game_crew/delete', 'UserGameCrewController@delete');
+	Route::post('users/game_invites/invite_friend', 'GamesInviteController@invite_friend');
+	Route::post('users/game_invites/get_friends_invited_to_game', 'GamesInviteController@get_friends_invited_to_game');
+	Route::post('users/game_invites/accept_invite', 'GamesInviteController@accept_invite');
+	Route::post('users/game_invites/decline_invite', 'GamesInviteController@decline_invite');
 
 	//FRIENDS
 	Route::post('users/make_friends', 'FriendController@make_friends');

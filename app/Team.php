@@ -15,4 +15,12 @@ class Team extends Model
     {
         return $this->hasOne('App\Image','venue_id','venue_id')->where('type','action')->orderBy('date_created','DESC');
     }
+
+    public function pitchers(){
+    	return $this->hasMany('App\Player')->where('position','P');
+    }
+
+    public function hitters(){
+    	return $this->hasMany('App\Player')->where('position','!=','P');
+    }
 }

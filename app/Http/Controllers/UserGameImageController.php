@@ -191,78 +191,119 @@ class UserGameImageController extends Controller
         else{
         	$cur = new UserGameImage;
         }
-        $valid_fields = ['user_id','game_id','caption','photo'];
-        $msg = array();
-        foreach($valid_fields as $field){
-            if($field == 'photo'){
-                $photo_image = $request->file('photo');
-                $photo_url = $request->input('photo');
-                if(isset($photo_image) || (isset($photo_url) && $photo_url !== '')){
-                	//lets delete existing amazon photo if it exists.
-	                $aws_controller = new AwsController;
-	                if($cur->id !== null){
-	                    //this means that the user is not new which means get current photo and delete it.
-	                    $aws_image_file_name = $cur->photo;
-	                    if(strpos($aws_image_file_name,'amazonaws') !== FALSE){ //if current photo is on amazon.
-	                        $aws_image_file_name = basename($aws_image_file_name);
-	                        $aws_controller->delete_aws_image($aws_image_file_name,'usergames');   //nothing checking success for this
-	                        //lets just hope this deletes and works. Not sure what to do if doesnt.. maybe email someone? Maybe save in a different table..idk, im just going to ignore for now..
-	                    }
-	                }
-	                if(isset($photo_image)){
-	                    $uploaded_image_url = $aws_controller->upload_image($photo_image,'usergames');
-	                    if($uploaded_image_url !== false){
-	                        $cur->photo = $uploaded_image_url;
-	                        $msg[] = 'Photo file was successfully uploaded to AWS S3.';
-	                    }
-	                    else{
-	                        $msg[] = "The photo file provided was not uploaded successfully.";
-	                        continue;
-	                    }
-	                }
-	                if(isset($photo_url) && $photo_url !== ''){
-	                    $cur->photo = $photo_url;
-	                    $msg[] = 'Photo url string provided was saved successfully.';
-	                }
-	                else{
-	                    $msg[] = 'The photo provided DID NOT have a value.';
-	                }
-                }
-                else{
-                	$ret = array(
-		              "success"=>false,
-		              "msg"=>'Photo field is required and was not recieved correctly.'
-		            );
-		        	die(json_encode($ret));
+        $photo_image = $request->file('photo');
+        $photo_url = $request->input('photo');
+        if(isset($photo_image) || (isset($photo_url) && $photo_url !== '')){
+            //lets delete existing amazon photo if it exists.
+            $aws_controller = new AwsController;
+            if($cur->id !== null){
+                //this means that the user is not new which means get current photo and delete it.
+                $aws_image_file_name = $cur->photo;
+                if(strpos($aws_image_file_name,'amazonaws') !== FALSE){ //if current photo is on amazon.
+                    $aws_image_file_name = basename($aws_image_file_name);
+                    $aws_controller->delete_aws_image($aws_image_file_name,'usergames');   //nothing checking success for this
+                    //lets just hope this deletes and works. Not sure what to do if doesnt.. maybe email someone? Maybe save in a different table..idk, im just going to ignore for now..
                 }
             }
-            else{
-                $field_value = $request->input($field);
-                if(isset($field_value)){
-                    $cur->$field = $field_value;
-                    //add to message the field that was successfully saved.
-                    $msg[] = $field .' field was saved successfully.';
+            if(isset($photo_image)){
+                if(!is_array($photo_image) || count($photo_image) < 1){
+                    if(is_array($photo_image)){
+                        $photo_image = $photo_image[0];
+                    }
+                    $valid_fields = ['user_id','game_id','caption','photo'];
+                    foreach($valid_fields as $field){
+                        $field_value = $request->input($field);
+                        if(isset($field_value)){
+                            $cur->$field = $field_value;
+                        }
+                    };
+                    $uploaded_image_url = $aws_controller->upload_image($photo_image,'usergames');
+                    if($uploaded_image_url !== false){
+                        $cur->photo = $uploaded_image_url;
+                    }
+                    $saved = $cur->save();
+                    if($saved){
+                        $ret = array(
+                          "success"=>true,
+                          "msg"=>'Record created or updated successfully.',
+                          'image'=>$cur
+                        );
+                    }
+                    else{
+                        $ret = array(
+                          "success"=>false,
+                          "msg"=>'There was a problem saving the record'
+                        );
+                    }
+                    die(json_encode($ret));
                 }
                 else{
-                    //add to message that field listed did not have a value passed.
-                    $msg[] = $field .' field DID NOT have a value.';
+                    if($cur->id !== null){
+                        $ret = array(
+                          "success"=>false,
+                          "msg"=>"You cannot pass multiple images when editing one single existing image. Given image_id ({$image_id})."
+                        );
+                        die(json_encode($ret));
+                    }
+                    $created_row_ids = array();
+                    foreach($photo_image as $one_photo){
+                        $cur = new UserGameImage;
+                        $valid_fields = ['user_id','game_id','caption','photo'];
+                        foreach($valid_fields as $field){
+                            $field_value = $request->input($field);
+                            if(isset($field_value)){
+                                $cur->$field = $field_value;
+                            }
+                        }
+                        $uploaded_image_url = $aws_controller->upload_image($one_photo,'usergames');
+                        if($uploaded_image_url !== false){
+                            $cur->photo = $uploaded_image_url;
+                        }
+                        $saved = $cur->save();
+                        if($saved){
+                            $created_row_ids[] = $cur->id;
+                        }
+                    }
+                    $ret = array(
+                      "success"=>true,
+                      "msg"=>'Record created or updated successfully.',
+                      'image'=>UserGameImage::whereIn('id',$created_row_ids)->get()
+                    );
+                    die(json_encode($ret));
                 }
             }
-        }
-        $saved = $cur->save();
-        if($saved){
-        	$ret = array(
-              "success"=>true,
-              "msg"=>'Record created or updated successfully. ' . implode(' ',$msg),
-              'user'=>$cur
-            );
+            if(isset($photo_url) && $photo_url !== ''){
+                $cur->photo = $photo_url;
+                $valid_fields = ['user_id','game_id','caption','photo'];
+                foreach($valid_fields as $field){
+                    $field_value = $request->input($field);
+                    if(isset($field_value)){
+                        $cur->$field = $field_value;
+                    }
+                }
+                $saved = $cur->save();
+                if($saved){
+                    $ret = array(
+                      "success"=>true,
+                      "msg"=>'Record created or updated successfully.',
+                      'image'=>$cur
+                    );
+                }
+                else{
+                    $ret = array(
+                      "success"=>false,
+                      "msg"=>'There was a problem saving the record'
+                    );
+                }
+                die(json_encode($ret));
+            }
         }
         else{
-        	$ret = array(
+            $ret = array(
               "success"=>false,
-              "msg"=>'There was a problem saving the record'
+              "msg"=>'Photo field is required and was not recieved correctly.'
             );
+            die(json_encode($ret));
         }
-        die(json_encode($ret));
     }
 }

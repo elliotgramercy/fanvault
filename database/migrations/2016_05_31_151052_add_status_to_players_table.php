@@ -3,7 +3,7 @@
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
 
-class AddFvMarketAbbrToTeamsTable extends Migration
+class AddStatusToPlayersTable extends Migration
 {
     /**
      * Run the migrations.
@@ -12,9 +12,9 @@ class AddFvMarketAbbrToTeamsTable extends Migration
      */
     public function up()
     {
-        if(Schema::hasTable('teams')){
-            Schema::table('teams', function ($table) {
-                $table->string('fv_market_abbr');
+        if(Schema::hasTable('players')){
+            Schema::table('players', function ($table) {
+                $table->enum('status',array('A','I'))->default('A');
             });
         }
     }
@@ -26,9 +26,9 @@ class AddFvMarketAbbrToTeamsTable extends Migration
      */
     public function down()
     {
-        if(Schema::hasTable('teams')){
-            Schema::table('teams', function ($table) {
-                $table->dropColumn('fv_market_abbr');
+        if(Schema::hasTable('players')){
+            Schema::table('players', function ($table) {
+                $table->dropColumn('status');
             });
         }
     }

@@ -12,9 +12,15 @@ use App\Game;
 use App\Ticket;
 use App\Venue;
 use App\Tailgate;
+use App\Team;
 
 use App\Http\Controllers\UserDeviceController as UserDeviceController;
 use App\Http\Controllers\AwsController as AwsController;
+
+
+use App\Http\Controllers\TeamController as TeamController;
+use App\Http\Controllers\GameController as GameController;
+use DB;
 
 class UserController extends Controller
 {
@@ -25,6 +31,22 @@ class UserController extends Controller
     Ex: [{"id":1,"name":"","email":"","created_at":"2016-05-02 00:24:48","updated_at":"2016-05-02 00:24:48","first_name":"e","last_name":"sabitov","dob":"0000-00-00 00:00:00","gender":"male","fb_user_id":"1633910033509707","fb_auth_tok":"","photo":""},{"id":5,"name":"","email":"test@TEST.COM","created_at":"2016-05-02 00:29:43","updated_at":"2016-05-02 00:29:43","first_name":"mac","last_name":"d","dob":"0000-00-00 00:00:00","gender":"male","fb_user_id":"1633910033509123","fb_auth_tok":"","photo":""}]
     */
     public function get_all_users(){
+        /* was doing some testing with task scheduling over here..
+        DB::table('temp_log')->insert(
+            ['value' => 'sp-started 15min call: '.gmdate('Y-m-d H:i:s',strtotime('now'))]
+        );
+        $team_controller = new TeamController;
+        $ret = $team_controller->updateAllWonLost();
+        sleep(1);
+        $game_controller = new GameController;
+        //updateLineups updates scores and lineups.
+        $ret2 = $game_controller->updateLineups();
+        DB::table('temp_log')->insert(
+            ['value' => 'sp-ended 15min call: '.gmdate('Y-m-d H:i:s',strtotime('now')), 'value_2'=>$ret, 'value_3'=>$ret2]
+        );
+        $return = true;
+        die;
+        */
         $users = User::all();
         die(json_encode($users->all()));
     }
@@ -121,20 +143,23 @@ class UserController extends Controller
             $valid_fields = ['name','first_name','last_name','email','dob','gender','fb_auth_tok','photo','device_token'];
             $msg = array();
             foreach($valid_fields as $field){
+                $field_value = $request->input($field);
                 if($field == 'photo'){
-                    //lets delete existing amazon photo if it exists.
-                    $aws_controller = new AwsController;
-                    if($cur->id !== null){
-                        //this means that the user is not new which means get current photo and delete it.
-                        $aws_image_file_name = $cur->photo;
-                        if(strpos($aws_image_file_name,'amazonaws') !== FALSE){ //if current photo is on amazon.
-                            $aws_image_file_name = basename($aws_image_file_name);
-                            $aws_controller->delete_aws_image($aws_image_file_name,'users');   //nothing checking success for this
-                            //lets just hope this deletes and works. Not sure what to do if doesnt.. maybe email someone? Maybe save in a different table..idk, im just going to ignore for now..
-                        }
-                    }
                     $photo_image = $request->file('photo');
                     $photo_url = $request->input('photo');
+                    if(isset($photo_image) || (isset($photo_url) && $photo_url !== '')){
+                        //lets delete existing amazon photo if it exists.
+                        $aws_controller = new AwsController;
+                        if($cur->id !== null){
+                            //this means that the user is not new which means get current photo and delete it.
+                            $aws_image_file_name = $cur->photo;
+                            if(strpos($aws_image_file_name,'amazonaws') !== FALSE){ //if current photo is on amazon.
+                                $aws_image_file_name = basename($aws_image_file_name);
+                                $aws_controller->delete_aws_image($aws_image_file_name,'users');   //nothing checking success for this
+                                //lets just hope this deletes and works. Not sure what to do if doesnt.. maybe email someone? Maybe save in a different table..idk, im just going to ignore for now..
+                            }
+                        }
+                    }
                     if(isset($photo_image)){
                         $photo = $request->file('photo');
                         $uploaded_image_url = $aws_controller->upload_image($photo,'users');
@@ -156,7 +181,6 @@ class UserController extends Controller
                     }
                 }
                 else{
-                    $field_value = $request->input($field);
                     if($field == 'email'){
                         if(!isset($field_value) || $field_value == ''){
                             if($new_user){
@@ -309,14 +333,26 @@ class UserController extends Controller
         //as well as the attendees.
         $now = gmdate('Y-m-d H:i:s',strtotime('+4 hours'));
         if($page !== 'all'){
-            $upcoming_games = Game::with('home_team','away_team','venue','tailgates')->with(['attendees'=>function($q) use ($all_friend_ids){
-            return $q->whereIn('user_id',$all_friend_ids);
-        }])->where('scheduled','>=',$now)->orderBy('scheduled', 'asc')->take(15)->skip($page_num*15)->get();
+            $upcoming_games = Game
+            ::with('home_team','away_team','venue','tailgates')
+            ->with(['attendees'=>function($q) use ($all_friend_ids){
+                return $q->whereIn('user_id',$all_friend_ids);
+            }])
+            ->with(['user_game_images'=>function($q) use ($all_friend_ids){
+                return $q->whereIn('user_id',$all_friend_ids);
+            }])
+            ->where('scheduled','>=',$now)->orderBy('scheduled', 'asc')->take(15)->skip($page_num*15)->get();
         }
         else{
-            $upcoming_games = Game::with('home_team','away_team','venue','tailgates')->with(['attendees'=>function($q) use ($all_friend_ids){
-            return $q->whereIn('user_id',$all_friend_ids);
-        }])->where('scheduled','>=',$now)->orderBy('scheduled', 'asc')->get();
+            $upcoming_games = Game
+            ::with('home_team','away_team','venue','tailgates')
+            ->with(['attendees'=>function($q) use ($all_friend_ids){
+                return $q->whereIn('user_id',$all_friend_ids);
+            }])
+            ->with(['user_game_images'=>function($q) use ($all_friend_ids){
+                return $q->whereIn('user_id',$all_friend_ids);
+            }])
+            ->where('scheduled','>=',$now)->orderBy('scheduled', 'asc')->get();
         }
         $ret = array(
           "success"=>true,
@@ -371,15 +407,34 @@ class UserController extends Controller
         $all_friend_ids = array_merge($friends_one,$friends_two);
         //$all_friend_objs = User::whereIn('id', $all_friend_ids)->get();
         $all_friend_ids[] = $user_id;
-        $game_obj = Game::with('home_team','away_team','venue','tailgates')->with(['attendees'=>function($q) use ($all_friend_ids){
+        $game_obj = Game
+        ::with('home_team','away_team','home_team_scores','away_team_scores')
+        ->with('venue','tailgates')
+        ->with(['home_team_lineup'=>function($q) use ($game_id){
+            return $q->where('game_id',$game_id);
+        }])
+        ->with(['away_team_lineup'=>function($q) use ($game_id){
+            return $q->where('game_id',$game_id);
+        }])
+        ->with(['friend_attendees'=>function($q) use ($all_friend_ids){
             return $q->whereIn('user_id',$all_friend_ids);
-        }])->with(['ticket'=>function($q) use ($user_id){
+        }])
+        ->with(['attendees'=>function($q) use ($all_friend_ids){
+            return $q->whereNotIn('user_id',$all_friend_ids);
+        }])
+        ->with(['ticket'=>function($q) use ($user_id){
             return $q->where('user_id',$user_id);
-        }])->with(['user_game_images'=>function($q) use ($user_id){
+        }])
+        ->with(['user_game_images'=>function($q) use ($user_id){
             return $q->where('user_id',$user_id);
-        }])->with(['user_game_crew_members'=>function($q) use ($user_id){
+        }])
+        ->with(['user_game_crew_members'=>function($q) use ($user_id){
             return $q->where('user_id',$user_id);
-        }])->where('id',$game_id)->first();
+        }])
+        ->with(['invited_friends'=>function($q) use ($user_id){
+            return $q->where('user_id',$user_id);
+        }])
+        ->where('id',$game_id)->first();
         $ret = array(
           "success"=>true,
           "game"=>$game_obj
@@ -403,18 +458,26 @@ class UserController extends Controller
             die(json_encode($ret));
         }
         //okay, we got the search, now lets get all users that match the search
-        $users = User::
-                where('first_name', 'like', "%{$search}%")
+        $users = User
+                ::where('first_name', 'like', "%{$search}%")
                 ->orWhere('last_name', 'like', "%{$search}%")
                 ->orWhere('name', 'like', "%{$search}%")
                 ->get();
-        $venues = Venue::with('venue_image')
+        //we want to also search matching teams, if any teams match then show venue for that team.
+        $team_venue_ids = Team
+                ::where('name','like', "%{$search}%")
+                ->select('venue_id')
+                ->get()->toArray();
+        $venues = Venue::with('venue_image','upcoming_games_for_venue')
                 ->where('name', 'like', "%{$search}%")
                 ->orWhere('market', 'like', "%{$search}%")
                 ->orWhere('surface', 'like', "%{$search}%")
+                ->orWhere('address', 'like', "%{$search}%")
+                ->orWhere('city', 'like', "%{$search}%")
+                ->orWhereIn('id',$team_venue_ids)
                 ->get();
-        $tailgates = Tailgate::
-                where('title', 'like', "%{$search}%")
+        $tailgates = Tailgate::with('tags')
+                ->where('title', 'like', "%{$search}%")
                 ->orWhere('description', 'like', "%{$search}%")
                 ->get();
         $ret = array(
@@ -422,6 +485,91 @@ class UserController extends Controller
           "users"=>$users,
           "stadiums"=>$venues,
           "tailgates"=>$tailgates
+        );
+        die(json_encode($ret));
+    }
+
+    /*
+    Name: search_type_ahead
+    Description: Takes in a search key and return a JSON array containing strings that match the search.
+    Parameters: 
+        search      - search string must be at least 2 characters long
+    Returns: (str) ret - JSON object containing the data.
+    */
+     public function search_type_ahead(Request $request){
+        $search = $request->input("search");
+        if(!isset($search) || $search === '' || strlen($search) < 2){
+            $ret = array(
+              "success"=>false,
+              "msg"=>'The search field was not recieved or did not have enough characters (minimum 2).'
+            );
+            die(json_encode($ret));
+        }
+        $users = User
+                ::where('first_name', 'like', "%{$search}%")
+                ->orWhere('last_name', 'like', "%{$search}%")
+                ->select('id','first_name','last_name')
+                ->get();
+        $teams = Team
+                ::where('name','like', "%{$search}%")
+                ->select('id','venue_id','name')
+                ->get();
+        $venues = Venue
+                ::where('name', 'like', "%{$search}%")
+                ->orWhere('market', 'like', "%{$search}%")
+                ->orWhere('surface', 'like', "%{$search}%")
+                ->orWhere('address', 'like', "%{$search}%")
+                ->orWhere('city', 'like', "%{$search}%")
+                ->select('id','name','market','surface','address','city')
+                ->get();
+        $tailgates = Tailgate
+                ::where('title', 'like', "%{$search}%")
+                ->orWhere('description', 'like', "%{$search}%")
+                ->select('id','title','description')
+                ->get();
+        $str_arr = array();
+        foreach($users as $user){
+            if(stripos($user->first_name, $search) !== false || stripos($user->last_name, $search) !== false){
+                $str_arr[] = $user->first_name . ' ' . $user->last_name;
+            }
+        }
+        foreach($venues as $venue){
+            if(stripos($venue->name, $search) !== false){
+                $str_arr[] = $venue->name;
+            }
+            if(stripos($venue->market, $search) !== false){
+                $str_arr[] = $venue->market;
+            }
+            if(stripos($venue->surface, $search) !== false){
+                $str_arr[] = $venue->surface;
+            }
+            if(stripos($venue->address, $search) !== false){
+                $str_arr[] = $venue->address;
+            }
+            if(stripos($venue->city, $search) !== false){
+                $str_arr[] = $venue->city;
+            }
+        }
+        foreach($teams as $team){
+            if(stripos($team->name, $search) !== false){
+                $str_arr[] = $team->name;
+            }
+        }
+        foreach($tailgates as $tailgate){
+            if(stripos($tailgate->title, $search) !== false){
+                $str_arr[] = $tailgate->title;
+            }
+            if(stripos($tailgate->description, $search) !== false){
+                $str_pos = stripos($tailgate->description, $search);
+                $start = strrpos($tailgate->description,' ',-strlen($tailgate->description) + $str_pos)+1;
+                $end = strpos($tailgate->description,' ',$str_pos);
+                $temp_str = substr($tailgate->description,$start,$end-$start);
+                $str_arr[] = $temp_str;
+            }
+        }
+        $ret = array(
+          "success"=>true,
+          "matches"=>array_slice(array_unique($str_arr),0,15)
         );
         die(json_encode($ret));
     }
