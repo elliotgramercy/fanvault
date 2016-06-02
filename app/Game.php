@@ -23,12 +23,12 @@ class Game extends Model
 
     public function home_team_no_players()
     {
-        return $this->hasOne('App\Team','id','home_team_id')->with('action_image');
+        return $this->hasOne('App\Team','id','home_team_id');
     }
 
     public function away_team_no_players()
     {
-        return $this->hasOne('App\Team','id','away_team_id')->with('action_image');
+        return $this->hasOne('App\Team','id','away_team_id');
     }
 
     public function home_team_scores(){
@@ -73,5 +73,19 @@ class Game extends Model
 
     public function invited_friends(){
         return $this->hasMany('App\GamesInvite');
+    }
+
+    public function home_team_game_stats()
+    {
+        return $this->hasMany('App\GamesPlayer','team_id','home_team_id')->with('player');
+    }
+
+    public function away_team_game_stats()
+    {
+        return $this->hasMany('App\GamesPlayer','team_id','away_team_id')->with('player');
+    }
+
+    public function officials(){
+        return $this->hasMany('App\GamesOfficial','game_id','id')->with('official');
     }
 }

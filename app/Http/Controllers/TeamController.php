@@ -250,6 +250,9 @@ class TeamController extends Controller
 					$cur->pitching_so = $player->statistics->pitching->outcome->ktotal;
 					$cur->pitching_bb = $player->statistics->pitching->onbase->bb;
 					$cur->pitching_h = $player->statistics->pitching->onbase->h;
+					//also created win and loss
+					$cur->pitching_win = $player->statistics->pitching->games->win;
+					$cur->pitching_loss = $player->statistics->pitching->games->loss;
 				}
 				if(isset($player->statistics->hitting)){	//player has hitting stats
 					$cur->hitting_h = $player->statistics->hitting->onbase->h;

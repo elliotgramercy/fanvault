@@ -19,7 +19,6 @@ class AddStatsToGameScoresTable extends Migration
                 $table->decimal('obp',5,3)->default(0);
                 $table->decimal('avg',5,3)->default(0);
                 $table->decimal('fpct',5,3)->default(0);
-                $table->text('officials')->default('');
             });
         }
     }
@@ -38,7 +37,6 @@ class AddStatsToGameScoresTable extends Migration
                 $table->dropColumn('obp');
                 $table->dropColumn('avg');
                 $table->dropColumn('fpct');
-                $table->dropColumn('officials');
             });
         }
     }

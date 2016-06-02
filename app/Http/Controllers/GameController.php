@@ -7,9 +7,12 @@ use Illuminate\Http\Request;
 use App\Venue;
 use App\Team;
 use App\Game;
-use App\GamesLineup;
 use App\Player;
+use App\Official;
+use App\GamesLineup;
 use App\GamesScore;
+use App\GamesOfficial;
+use App\GamesPlayer;
 
 use App\Http\Requests;
 
@@ -212,7 +215,7 @@ class GameController extends Controller
     Returns: (str) ret - JSON object containing the number of rows updated.
     Ex: {"rows_updated":31}
     */
-    /*no longer used we now use UpdateLineups
+    /*no longer used we now use updateGames
 	public function updateAllScores(){
 		$srapi = env('SPORTS_RADAR_API_KEY');
 		$rows_updated = 0;
@@ -261,19 +264,23 @@ class GameController extends Controller
 	}
 	
 	/*
-    Name: updateLineups
+    Name: updateGames
     Description: Updates the lineups for the given +x days.. x=0 is today, x=1 is tomorrow.. x cannot exceed 3.
     Parameters: 
     	num - number of days in future to update.
     Returns: (str) ret - JSON object containing the number of new rows created and rows updated.
     Ex: {"rows_updated":31,"rows_created":2399}
     */
-	public function updateLineups(){
+	public function updateGames(){
 		$srapi = env('SPORTS_RADAR_API_KEY');
 		$positions_arr = array('P','C','1B','2B','3B','SS','LF','CF','RF','DH','PH','PR');
 		$lineup_rows_updated = 0;
 		$game_rows_updated = 0;
 		$game_score_rows_updated = 0;
+		$officials_created = 0;
+		$game_officials_created = 0;
+		$players_created = 0;
+		$game_players_updated = 0;
 		for($i = 1; $i>=0; $i--){
 			$now = strtotime("-{$i} days");
 			$year = gmdate('Y',$now);
@@ -348,10 +355,115 @@ class GameController extends Controller
 					if(isset($game->game->$home_or_away->scoring)){
 						$cur_games_score->inning_scores = $game->game->$home_or_away->scoring;
 					}
+					foreach(array('team_lob','slg','obp','avg') as $one_stat){
+						if(isset($game->game->$home_or_away->statistics->hitting->$one_stat)){
+							$cur_games_score->$one_stat = $game->game->$home_or_away->statistics->hitting->$one_stat;
+						}
+					}
+					if(isset($game->game->$home_or_away->statistics->fielding->fpct)){
+						$cur_games_score->fpct = $game->game->$home_or_away->statistics->fielding->fpct;
+					}
 					$game_score_saved = $cur_games_score->save();
 					if($game_score_saved){
 						$game_score_rows_updated++;
 					}
+					//now lets update the games players.
+					//if there are players
+					if(isset($game->game->$home_or_away->players)){
+						//loop through each player
+						foreach($game->game->$home_or_away->players as $player){
+							//first get the player_id in players table
+							$existing_player = Player::where('sr_player_id',$player->id)->first();
+							if(is_null($existing_player)){	//this should never really happen, but just in case.
+								//create new if it didnt exist
+								$existing_player = new Player;
+								$existing_player->team_id = $cur_team->id;
+								$existing_player->sr_player_id = $player->id;
+								$existing_player->position = $player->position;
+								$existing_player->primary_position = $player->primary_position;
+								$existing_player->first_name = $player->first_name;
+								$existing_player->last_name = $player->last_name;
+								$existing_player->preferred_name = $player->preferred_name;
+								$existing_player->jersey_number = $player->jersey_number;
+								if($existing_player->save()){
+									$players_created++;
+								}
+							}
+							//now that we have our player lets see if there is already a GamesPlayer record that we need to update,
+							//or if we need to create a new one.
+							$existing_games_player = GamesPlayer::where(['game_id'=>$cur_game->id,'player_id'=>$existing_player->id])->first();
+							if(is_null($existing_games_player)){
+								//new record
+								$existing_games_player = new GamesPlayer;
+								$existing_games_player->player_id = $existing_player->id;
+								$existing_games_player->game_id = $cur_game->id;
+								$existing_games_player->team_id = $cur_team->id;
+							}
+							if($player->position === 'P'){
+								$existing_games_player->is_pitcher = true;
+							}
+							if(isset($player->statistics->pitching)){	//player has pitching stats
+								$existing_games_player->pitching_er = $player->statistics->pitching->runs->earned;
+								$existing_games_player->pitching_era = $player->statistics->pitching->era;
+								$existing_games_player->pitching_so = $player->statistics->pitching->outcome->ktotal;
+								$existing_games_player->pitching_bb = $player->statistics->pitching->onbase->bb;
+								$existing_games_player->pitching_h = $player->statistics->pitching->onbase->h;
+								$existing_games_player->pitching_r = $player->statistics->pitching->runs->total;
+								$existing_games_player->pitching_ip = $player->statistics->pitching->ip_1;
+								$existing_games_player->pitching_bf = $player->statistics->pitching->bf;
+								$existing_games_player->pitching_gofo = $player->statistics->pitching->gofo;
+							}
+							if(isset($player->statistics->hitting)){	//player has hitting stats
+								$existing_games_player->hitting_h = $player->statistics->hitting->onbase->h;
+								$existing_games_player->hitting_bb = $player->statistics->hitting->onbase->bb;
+								$existing_games_player->hitting_so = $player->statistics->hitting->outcome->ktotal;
+								$existing_games_player->hitting_avg = $player->statistics->hitting->avg;
+								$existing_games_player->hitting_rbi = $player->statistics->hitting->rbi;
+								$existing_games_player->hitting_r = $player->statistics->hitting->runs->total;
+								$existing_games_player->hitting_ab = $player->statistics->hitting->ab;
+								$existing_games_player->hitting_d = $player->statistics->hitting->onbase->d;
+								$existing_games_player->hitting_hr = $player->statistics->hitting->onbase->hr;
+								$existing_games_player->hitting_stolen = $player->statistics->hitting->steal->stolen;
+							}
+							//and finally lets save this games_player
+							if($existing_games_player->save()){
+								$game_players_updated++;
+							}
+						}
+					}
+				}
+				// Now lets store the game officials
+				if(isset($game->game->officials)){
+					$officials = $game->game->officials;
+					foreach($officials as $one_official){
+						$existing_official = Official::where('sr_official_id',$one_official->id)->first();
+						if(is_null($existing_official)){
+							$existing_official = new Official;
+							foreach(array('first_name','last_name','assignment','experience') as $sett){
+								if(isset($one_official->$sett)){
+									$existing_official->$sett = $one_official->$sett;
+								}
+							}
+							if(isset($one_official->id)){
+								$existing_official->sr_official_id = $one_official->id;
+							}
+							if($existing_official->save()){
+								$officials_created++;
+							}	
+						}
+						//now that we have the official in the db, we can create the GamesOfficial record.
+						//lets see if there is already an existing record, in which case we dont need to do anything
+						$existing_games_official = GamesOfficial::where(['game_id'=>$cur_game->id,'official_id'=>$existing_official->id])->first();
+						if(is_null($existing_games_official)){
+							$existing_games_official = new GamesOfficial;
+							$existing_games_official->game_id = $cur_game->id;
+							$existing_games_official->official_id = $existing_official->id;
+							if($existing_games_official->save()){
+								$game_officials_created++;
+							}
+						}
+					}
+
 				}
 			}
 			sleep(1);
@@ -359,7 +471,11 @@ class GameController extends Controller
 		return json_encode(array(
 			'game_rows_updated' => $game_rows_updated,
 			'lineup_rows_updated' => $lineup_rows_updated,
-			'game_score_rows_updated'=>$game_score_rows_updated
+			'game_score_rows_updated'=>$game_score_rows_updated,
+			'officials_created'=>$officials_created,
+			'game_officials_created'=>$game_officials_created,
+			'players_created'=>$players_created,
+			'game_players_updated'=>$game_players_updated
 		));
 	}
 }

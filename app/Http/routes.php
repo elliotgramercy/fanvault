@@ -46,7 +46,7 @@ Route::group(['middleware' => ['web']], function () {
 	Route::post('srapi/games/getAllUpcoming', 'GameController@getAllUpcoming');
 	Route::post('srapi/games/updateAll', 'GameController@updateAll');
 	Route::post('srapi/games/updateAllScores', 'GameController@updateAllScores');
-	Route::post('srapi/games/updateLineups', 'GameController@updateLineups');
+	Route::post('srapi/games/updateGames', 'GameController@updateGames');
 
 	//IMAGES
 	Route::post('srapi/images/updateVenueImages', 'ImageController@updateVenueImages');

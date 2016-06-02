@@ -47,8 +47,8 @@ class Kernel extends ConsoleKernel
             $game_controller = new GameController;
             $ret = $team_controller->updateAllWonLost();
             sleep(1);
-            //updateLineups updates scores and lineups.
-            $ret2 = $game_controller->updateLineups();
+            //updateGames updates scores and lineups.
+            $ret2 = $game_controller->updateGames();
             DB::table('temp_log')->insert(
                 ['value' => 'ended 15min call: '.gmdate('Y-m-d H:i:s',strtotime('now')), 'value_2'=>$ret, 'value_3'=>$ret2]
             );

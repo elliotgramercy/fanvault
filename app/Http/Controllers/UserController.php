@@ -31,22 +31,6 @@ class UserController extends Controller
     Ex: [{"id":1,"name":"","email":"","created_at":"2016-05-02 00:24:48","updated_at":"2016-05-02 00:24:48","first_name":"e","last_name":"sabitov","dob":"0000-00-00 00:00:00","gender":"male","fb_user_id":"1633910033509707","fb_auth_tok":"","photo":""},{"id":5,"name":"","email":"test@TEST.COM","created_at":"2016-05-02 00:29:43","updated_at":"2016-05-02 00:29:43","first_name":"mac","last_name":"d","dob":"0000-00-00 00:00:00","gender":"male","fb_user_id":"1633910033509123","fb_auth_tok":"","photo":""}]
     */
     public function get_all_users(){
-        /* was doing some testing with task scheduling over here..
-        DB::table('temp_log')->insert(
-            ['value' => 'sp-started 15min call: '.gmdate('Y-m-d H:i:s',strtotime('now'))]
-        );
-        $team_controller = new TeamController;
-        $ret = $team_controller->updateAllWonLost();
-        sleep(1);
-        $game_controller = new GameController;
-        //updateLineups updates scores and lineups.
-        $ret2 = $game_controller->updateLineups();
-        DB::table('temp_log')->insert(
-            ['value' => 'sp-ended 15min call: '.gmdate('Y-m-d H:i:s',strtotime('now')), 'value_2'=>$ret, 'value_3'=>$ret2]
-        );
-        $return = true;
-        die;
-        */
         $users = User::all();
         die(json_encode($users->all()));
     }
@@ -409,13 +393,19 @@ class UserController extends Controller
         $all_friend_ids[] = $user_id;
         $game_obj = Game
         ::with('home_team','away_team','home_team_scores','away_team_scores')
-        ->with('venue','tailgates')
         ->with(['home_team_lineup'=>function($q) use ($game_id){
             return $q->where('game_id',$game_id);
         }])
         ->with(['away_team_lineup'=>function($q) use ($game_id){
             return $q->where('game_id',$game_id);
         }])
+        ->with(['home_team_game_stats'=>function($q) use ($game_id){
+            return $q->where('game_id',$game_id);
+        }])
+        ->with(['away_team_game_stats'=>function($q) use ($game_id){
+            return $q->where('game_id',$game_id);
+        }])
+        ->with('venue','officials','tailgates')
         ->with(['friend_attendees'=>function($q) use ($all_friend_ids){
             return $q->whereIn('user_id',$all_friend_ids);
         }])
