@@ -87,13 +87,7 @@ class VenueController extends Controller
         	$start_of_month = gmdate('Y-m-d H:i:s',strtotime( 'first day of ' . $date));
         	$end_of_month = gmdate('Y-m-d H:i:s',strtotime( 'last day of ' . $date));
         }
-        $the_games = Game::with('home_team_no_players','away_team_no_players')->where('venue_id',$cur_venue->id)->where('scheduled','>',$start_of_month)->where('scheduled','<',$end_of_month)->get()->toArray();
-        foreach($the_games as &$game){
-            $game['home_team'] = $game['home_team_no_players'];
-            unset($game['home_team_no_players']);
-            $game['away_team'] = $game['away_team_no_players'];
-            unset($game['away_team_no_players']);
-        }
+        $the_games = Game::with('home_team','away_team')->where('venue_id',$cur_venue->id)->where('scheduled','>',$start_of_month)->where('scheduled','<',$end_of_month)->get()->toArray();
         $cur_venue->upcoming_games = $the_games;
         $ret = array(
           "success"=>true,

@@ -262,13 +262,18 @@ class AwsController extends Controller
             mt_srand((double)microtime()*10000);//optional for php 4.2.0 and up.
             $charid = strtoupper(md5(uniqid(rand(), true)));
             $hyphen = chr(45);// "-"
-            $uuid = chr(123)// "{"
+            /*$uuid = chr(123)// "{"
                 .substr($charid, 0, 8).$hyphen
                 .substr($charid, 8, 4).$hyphen
                 .substr($charid,12, 4).$hyphen
                 .substr($charid,16, 4).$hyphen
                 .substr($charid,20,12)
-                .chr(125);// "}"
+                .chr(125);// "}"*/
+            $uuid = substr($charid, 0, 8).$hyphen
+            .substr($charid, 8, 4).$hyphen
+            .substr($charid,12, 4).$hyphen
+            .substr($charid,16, 4).$hyphen
+            .substr($charid,20,12);
             return $uuid;
         }
     }
@@ -304,7 +309,7 @@ class AwsController extends Controller
 	}
 	/*
     Name: delete_aws_image
-    Description: deletes tailgate image from amazon s3
+    Description: deletes image from amazon s3
     */
 	public function delete_aws_image($url=false,$folder=false){
 		if($url!==false && $folder!==false){
@@ -374,6 +379,66 @@ class AwsController extends Controller
 			        'Bucket'    => 'fanvaultapp',
 			        'Key'       => 'venues/'.$imageFileName,
 			        'Body'      => $jpeg_file_contents,
+			        'ContentType'=>'image/jpeg'
+			    ));
+				return $result['ObjectURL'];
+			}catch (S3Exception $e) {
+				return false;
+			}
+		}
+		else{
+			return false;
+		}
+	}
+
+	public function upload_headshot_image($url = false, $name = false, $max_size = false){
+		if($url!==false && $url!=='' && $name !== false && $name !== ''){
+			$sharedConfig = [
+			    'region'  => 'us-east-1',
+			    'version' => 'latest'
+			];
+			$img = file_get_contents($url);
+			if($max_size !== false){
+				$img = imagecreatefromstring($img);
+				$max_width = $max_size;
+				$max_height = $max_size;
+				$width = imagesx( $img );
+			    $height = imagesy( $img );
+			    if ($width > $height) {
+			        $newwidth = $max_width;
+			        $divisor = $width / $max_width;
+			        $newheight = floor( $height / $divisor);
+			    }
+			    else {
+			        $newheight = $max_height;
+			        $divisor = $height / $max_height;
+			        $newwidth = floor( $width / $divisor );
+			    }
+			    // Create a new temporary image.
+			    $tmpimg = imagecreatetruecolor( $newwidth, $newheight );
+			    // Copy and resize old image into new image.
+			    imagecopyresampled( $tmpimg, $img, 0, 0, 0, 0, $newwidth, $newheight, $width, $height );
+			    // Save thumbnail into a file.
+			    ob_start();
+			    imagejpeg($tmpimg);
+			    $jpeg_file_contents = ob_get_contents();
+			    ob_end_clean();
+			    // release the memory
+			    imagedestroy($tmpimg);
+			    imagedestroy($img);
+			    $img = $jpeg_file_contents;
+			}
+		    $imageFileName = $this->getGUID() . '_' . $name . '.jpg';
+		    try {
+				$sharedConfig = [
+				    'region'  => 'us-east-1',
+				    'version' => 'latest'
+				];
+				$client = S3Client::factory($sharedConfig);
+				$result = $client->putObject(array(
+			        'Bucket'    => 'fanvaultapp',
+			        'Key'       => 'playerheadshots/'.$imageFileName,
+			        'Body'      => $img,
 			        'ContentType'=>'image/jpeg'
 			    ));
 				return $result['ObjectURL'];

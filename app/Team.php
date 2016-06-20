@@ -17,10 +17,10 @@ class Team extends Model
     }
 
     public function pitchers(){
-    	return $this->hasMany('App\Player')->where('position','P');
+    	return $this->hasMany('App\Player')->where('position','P')->with('headshot');
     }
 
     public function hitters(){
-    	return $this->hasMany('App\Player')->where('position','!=','P');
+    	return $this->hasMany('App\Player')->where('position','!=','P')->with('headshot');
     }
 }

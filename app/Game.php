@@ -13,12 +13,12 @@ class Game extends Model
 
     public function home_team()
     {
-        return $this->hasOne('App\Team','id','home_team_id')->with('pitchers','hitters');
+        return $this->hasOne('App\Team','id','home_team_id');
     }
 
     public function away_team()
     {
-        return $this->hasOne('App\Team','id','away_team_id')->with('pitchers','hitters');
+        return $this->hasOne('App\Team','id','away_team_id');
     }
 
     public function home_team_no_players()
@@ -39,12 +39,20 @@ class Game extends Model
         return $this->hasOne('App\GamesScore');
     }
 
-    public function home_team_lineup(){
-        return $this->hasMany('App\GamesLineup','team_id','home_team_id')->with('player');
+    public function home_team_lineup_pitchers(){
+        return $this->hasMany('App\GamesLineup','team_id','home_team_id')->where('position_num',1)->with('player');
     }
 
-    public function away_team_lineup(){
-        return $this->hasMany('App\GamesLineup','team_id','away_team_id')->with('player');
+    public function home_team_lineup_hitters(){
+        return $this->hasMany('App\GamesLineup','team_id','home_team_id')->where('position_num','!=',1)->with('player');
+    }
+
+    public function away_team_lineup_pitchers(){
+        return $this->hasMany('App\GamesLineup','team_id','away_team_id')->where('position_num',1)->with('player');
+    }
+
+    public function away_team_lineup_hitters(){
+        return $this->hasMany('App\GamesLineup','team_id','away_team_id')->where('position_num','!=',1)->with('player');
     }
 
     public function attendees(){

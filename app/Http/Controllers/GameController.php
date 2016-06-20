@@ -16,6 +16,8 @@ use App\GamesPlayer;
 
 use App\Http\Requests;
 
+use DB;
+
 class GameController extends Controller
 {
     /*
@@ -33,8 +35,11 @@ class GameController extends Controller
     	$value = $request->input("value");
     	if(isset($field) && isset($value)){
     		if($field == 'id' || $field == 'name' || $field == 'sr_game_id'){
-    			$games = Game::with('home_team','away_team','venue','tailgates')->where($field, $value);
-    			die(json_encode($games->get()));
+    			$games = Game::with('home_team','away_team','venue','tailgates')->where($field, $value)->get()->toArray();
+    			foreach($games as &$game){
+    				$game['venue']['venue_image'] = $game['venue']['venue_image']['url'];
+    			}
+    			die(json_encode($games));
     		}
     		else{
     			$ret = array(
@@ -62,8 +67,11 @@ class GameController extends Controller
     */
     public function getAll()
     {
-        $games = Game::with('home_team','away_team','venue','tailgates')->get();
-        die(json_encode($games->all()));
+        $games = Game::with('home_team','away_team','venue','tailgates')->get()->toArray();
+        foreach($games as &$game){
+			$game['venue']['venue_image'] = $game['venue']['venue_image']['url'];
+		}
+        die(json_encode($games));
     }
 
     /*
@@ -81,8 +89,11 @@ class GameController extends Controller
             $now = gmdate('Y-m-d H:i:s',strtotime($date));
         }
         $until = gmdate('Y-m-d H:i:s',strtotime(gmdate('Y-m-d',strtotime($now.' +1 day'))));
-    	$games = Game::with('home_team','away_team','venue','tailgates')->where('scheduled','>=',$now)->where('scheduled','<',$until)->orderBy('scheduled', 'asc')->get();		
-        die(json_encode($games->all()));
+    	$games = Game::with('home_team','away_team','venue','tailgates')->where('scheduled','>=',$now)->where('scheduled','<',$until)->orderBy('scheduled', 'asc')->get()->toArray();	
+		foreach($games as &$game){
+			$game['venue']['venue_image'] = $game['venue']['venue_image']['url'];
+		}	
+        die(json_encode($games));
     }
     
     /*
@@ -96,6 +107,9 @@ class GameController extends Controller
     		found in my database. Not sure why that would be because all venues and teams were imported.
     */
 	public function updateAll(){
+		DB::table('temp_log')->insert(
+            ['value' => 'start 1am GameController@updateAll: '.gmdate('Y-m-d H:i:s',strtotime('now'))]
+        );
 		$srapi = env('SPORTS_RADAR_API_KEY');
 		$return = file_get_contents("http://api.sportradar.us/mlb-p5/games/2016/REG/schedule.json?api_key={$srapi}");
 		$return = json_decode($return);
@@ -206,6 +220,9 @@ class GameController extends Controller
 			'rows_created' => $rows_created,
 			'game_score_rows_updated'=>$game_score_rows_updated
 		);
+		DB::table('temp_log')->insert(
+            ['value' => 'end 1am GameController@updateAll: '.gmdate('Y-m-d H:i:s',strtotime('now')),'value_2'=>json_encode($ret)]
+        );
 		return json_encode($ret);
 	}
 	/*
@@ -272,6 +289,9 @@ class GameController extends Controller
     Ex: {"rows_updated":31,"rows_created":2399}
     */
 	public function updateGames(){
+		DB::table('temp_log')->insert(
+            ['value' => 'start 15min GameController@updateGames: '.gmdate('Y-m-d H:i:s',strtotime('now'))]
+        );
 		$srapi = env('SPORTS_RADAR_API_KEY');
 		$positions_arr = array('P','C','1B','2B','3B','SS','LF','CF','RF','DH','PH','PR');
 		$lineup_rows_updated = 0;
@@ -468,7 +488,7 @@ class GameController extends Controller
 			}
 			sleep(1);
 		}
-		return json_encode(array(
+		$ret = json_encode(array(
 			'game_rows_updated' => $game_rows_updated,
 			'lineup_rows_updated' => $lineup_rows_updated,
 			'game_score_rows_updated'=>$game_score_rows_updated,
@@ -477,5 +497,9 @@ class GameController extends Controller
 			'players_created'=>$players_created,
 			'game_players_updated'=>$game_players_updated
 		));
+		DB::table('temp_log')->insert(
+            ['value' => 'end 15min GameController@updateGames: '.gmdate('Y-m-d H:i:s',strtotime('now')), 'value_2'=>$ret]
+        );
+		return $ret;
 	}
 }

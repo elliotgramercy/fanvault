@@ -40,6 +40,7 @@ Route::group(['middleware' => ['web']], function () {
 	Route::post('srapi/teams/updateMLBcolors', 'TeamController@updateMLBcolors');
 	Route::post('srapi/teams/updateAllWonLost', 'TeamController@updateAllWonLost');
 	Route::post('srapi/teams/updateTeamPlayers', 'TeamController@updateTeamPlayers');
+	Route::post('srapi/teams/updatePlayerHeadShots', 'TeamController@updatePlayerHeadShots');
 	//Games
 	Route::post('srapi/games/getOneBy', 'GameController@getOneBy');
 	Route::post('srapi/games/getAll', 'GameController@getAll');
@@ -58,7 +59,7 @@ Route::group(['middleware' => ['web']], function () {
 
 	//USERS
 	Route::post('users/get_all', 'UserController@get_all_users');
-	Route::post('users/get', 'UserController@get_user');
+	Route::post('users/get', 'UserController@get');
 	Route::post('users/update', 'UserController@update_user');
 	Route::post('users/delete', 'UserController@delete_user');
 	Route::post('users/get_social_feed', 'UserController@get_social_feed');
@@ -67,6 +68,7 @@ Route::group(['middleware' => ['web']], function () {
 	Route::post('users/get_user_games_attending', 'GamesAttendeeController@get_user_games_attending');
 	Route::post('users/add_tailgate_attendee', 'TailgatesAttendeeController@add_tailgate_attendee');
 	Route::post('users/get_game_for_user', 'UserController@get_game_for_user');
+	Route::post('users/get_game_for_user_2', 'UserController@get_game_for_user_2');
 	Route::post('users/search', 'UserController@search');
 	Route::post('users/search_type_ahead', 'UserController@search_type_ahead');
 	Route::post('users/user_game_images/update', 'UserGameImageController@update');

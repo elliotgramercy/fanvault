@@ -63,8 +63,6 @@ class ImageController extends Controller
 		$return = json_decode(json_encode(simplexml_load_string($return, 'SimpleXMLElement', LIBXML_NOCDATA)),true);
 		$assets = $return['asset'];
 		$c = 0;
-        $max_width = 1000;
-        $max_height = 1000;
 		foreach($assets as $asset){
 			$id = $asset['@attributes']['id'];
 			$date = gmdate('Y-m-d H:i:s',strtotime($asset['@attributes']['created']));

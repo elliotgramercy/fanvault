@@ -138,8 +138,12 @@ class UserGameImageController extends Controller
     	image_id - existing image id, if left blank, then new image will be created.
     	user_id	- (Required) existing user id. Cannot be blank or non existing user id.
     	game_id - (Required) existing game id. Cannot be blank or non existing game id.
-    	caption - string caption
-    	photo - (Required) This will either be a file or a string. String will be considered url and stored. 
+    	caption - The image caption. Can take in an array when uploading multiple images. Make sure indexes on caption[] match
+            the indexes on photo[]
+        private - whether this will be viewable by everyone using app (stadium) or not. Default to true, so either pass false,  
+            or dont pass anything.
+    	photo - (Required) This will either be a file or a string. String will be considered url and stored. This can be an
+            an array as well (photo[])
     		File on the other hand will be uploaded to Amazon
     Returns: (str) ret - JSON object containing success and message
     Ex: {"success":true,"msg":"Record created or updated successfully. user_id field was saved successfully. game_id field was saved successfully. caption field DID NOT have a value. Photo file was successfully uploaded to AWS S3. The photo provided DID NOT have a value.","user":{"id":10,"user_id":"63","game_id":"62","caption":"","photo":"https:\/\/s3.amazonaws.com\/fanvaultapp\/usergames\/%7B687B5D84-6E6F-B9FE-520F-A050E148EE26%7D.jpg","created_at":"2016-05-18 20:12:40","updated_at":"2016-05-18 20:13:44"}}
@@ -205,12 +209,15 @@ class UserGameImageController extends Controller
                     //lets just hope this deletes and works. Not sure what to do if doesnt.. maybe email someone? Maybe save in a different table..idk, im just going to ignore for now..
                 }
             }
+            $private = $request->input('private');
+            $private = $private === 'false' ? false : true;
+            $cur->private = $private;
             if(isset($photo_image)){
                 if(!is_array($photo_image) || count($photo_image) < 1){
                     if(is_array($photo_image)){
                         $photo_image = $photo_image[0];
                     }
-                    $valid_fields = ['user_id','game_id','caption','photo'];
+                    $valid_fields = ['user_id','game_id','caption'];
                     foreach($valid_fields as $field){
                         $field_value = $request->input($field);
                         if(isset($field_value)){
@@ -246,13 +253,20 @@ class UserGameImageController extends Controller
                         die(json_encode($ret));
                     }
                     $created_row_ids = array();
-                    foreach($photo_image as $one_photo){
+                    foreach($photo_image as $index=>$one_photo){
                         $cur = new UserGameImage;
-                        $valid_fields = ['user_id','game_id','caption','photo'];
+                        $valid_fields = ['user_id','game_id','caption'];
                         foreach($valid_fields as $field){
                             $field_value = $request->input($field);
-                            if(isset($field_value)){
-                                $cur->$field = $field_value;
+                            if($field === 'caption'){
+                                if(isset($field_value[$index]) && $field_value[$index] !== ''){
+                                    $cur->caption = $field_value[$index];
+                                }
+                            }
+                            else{
+                                if(isset($field_value)){
+                                    $cur->$field = $field_value;
+                                } 
                             }
                         }
                         $uploaded_image_url = $aws_controller->upload_image($one_photo,'usergames');
@@ -274,7 +288,7 @@ class UserGameImageController extends Controller
             }
             if(isset($photo_url) && $photo_url !== ''){
                 $cur->photo = $photo_url;
-                $valid_fields = ['user_id','game_id','caption','photo'];
+                $valid_fields = ['user_id','game_id','caption'];
                 foreach($valid_fields as $field){
                     $field_value = $request->input($field);
                     if(isset($field_value)){

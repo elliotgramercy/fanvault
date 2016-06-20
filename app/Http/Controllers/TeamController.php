@@ -8,7 +8,12 @@ use App\Venue;
 use App\Image;
 use App\Player;
 use App\GamesLineup;
+use App\PlayersHeadshot;
 use App\Http\Requests;
+
+use DB;
+
+set_time_limit(3000);
 
 class TeamController extends Controller
 {
@@ -181,6 +186,9 @@ class TeamController extends Controller
         Ex: {"rows_updated":30}
     */
 	public function updateAllWonLost(){
+		DB::table('temp_log')->insert(
+            ['value' => 'start 15min TeamController@updateAllWonLost: '.gmdate('Y-m-d H:i:s',strtotime('now'))]
+        );
 		$srapi = env('SPORTS_RADAR_API_KEY');
 		$return = file_get_contents("http://api.sportradar.us/mlb-p5/seasontd/2016/REG/standings.json?api_key={$srapi}");
 		$return = json_decode($return);
@@ -202,7 +210,11 @@ class TeamController extends Controller
 				}
 			}
 		}
-		return json_encode(array('rows_updated' => $rows_updated));
+		$ret = json_encode(array('rows_updated' => $rows_updated));
+		DB::table('temp_log')->insert(
+            ['value' => 'end 15min TeamController@updateAllWonLost: '.gmdate('Y-m-d H:i:s',strtotime('now')),'value_2'=>$ret]
+        );
+		return $ret;
 	}
 	/*
     Name: updateTeamPlayers
@@ -212,6 +224,9 @@ class TeamController extends Controller
     Ex: {"rows_created":7,"rows_updated":983}
     */
 	public function updateTeamPlayers(){
+		DB::table('temp_log')->insert(
+            ['value' => 'start 1am TeamController@updateTeamPlayers: '.gmdate('Y-m-d H:i:s',strtotime('now'))]
+        );
 		$num = 1;
 		$srapi = env('SPORTS_RADAR_API_KEY');
 		$now = strtotime('now');
@@ -276,9 +291,105 @@ class TeamController extends Controller
 			$old_player_ids = Player::whereNotIn('sr_player_id',$player_ids)->where('team_id',$team->id)->update(['status' => 'I']);
 			sleep(1);
 		}
-		return json_encode(array(
+		$ret = json_encode(array(
 			'rows_created' => $rows_created,
 			'rows_updated' => $rows_updated
 		));
+		DB::table('temp_log')->insert(
+            ['value' => 'end 1am TeamController@updateTeamPlayers: '.gmdate('Y-m-d H:i:s',strtotime('now')),'value_2'=>$ret]
+        );
+		return $ret;
+	}
+	/*
+    Name: updatePlayerHeadShots
+    Description: Updates the headshots for the players. Saves all the images in AWS S3
+    Parameters: n/a
+    Returns: (str) ret - JSON object containing the number of new rows created and old rows that were removed.
+    Ex: {"rows_created":7,"rows_updated":983}
+    */
+	public function updatePlayerHeadShots(){
+		$srapi = env('SPORTS_RADAR_IMAGES_API_KEY');
+		$return = file_get_contents("http://api.sportradar.us/mlb-images-p2/usat/players/headshots/manifests/all_assets.xml?api_key={$srapi}");
+		$return = json_decode(json_encode(simplexml_load_string($return, 'SimpleXMLElement', LIBXML_NOCDATA)),true);
+		$assets = $return['asset'];
+		$rows_created = 0;
+		$rows_removed = 0;
+		$sr_player_id_count = array();
+		$player_id_count = array();
+		$aws_controller = new AwsController;
+		foreach($assets as $asset){
+			if(!isset($asset['@attributes']['id']) || !isset($asset['@attributes']['player_id']) || !isset($asset['links']['link'])){
+				continue;
+			}
+			if(!in_array($asset['@attributes']['player_id'],$sr_player_id_count)){
+				$sr_player_id_count[] = $asset['@attributes']['player_id'];
+			}
+			$sr_image_id = $asset['@attributes']['id'];
+			$sr_player_id = $asset['@attributes']['player_id'];
+			$headshots = array(
+				'org' => $asset['links']['link'][0]['@attributes']['href'],
+				'250'=>$asset['links']['link'][1]['@attributes']['href'],
+				'190'=>$asset['links']['link'][2]['@attributes']['href']
+			);
+			//lets get the player
+			$existing_player = Player::where('sr_player_id',$sr_player_id)->first();
+			if(is_null($existing_player)){	//if player doesnt exist then skip.
+				continue;
+			}
+			if(!in_array($existing_player->id,$player_id_count)){
+				$player_id_count[] = $existing_player->id;
+			}
+			//now lets get existing player images from db
+			$existing_headshots = PlayersHeadshot::where('player_id',$existing_player->id)->get();
+			//we need to delete all three from the database and remove them from AWS S3
+			if($existing_headshots->count()){
+				foreach($existing_headshots as $existing_headshot){
+	                if(isset($existing_headshot->url) && $existing_headshot->url !== ''){
+	                    $aws_controller->delete_aws_image(basename($existing_headshot->url),'playerheadshots');   //nothing checking success
+	                }
+	                //now delete from db as well
+	                if($existing_headshot->delete()){
+	                	$rows_removed++;
+	                }
+				}
+			}
+			//or now the old headshots for this player should have been removed so we can now add new images in.
+			foreach($headshots as $name=>$value){
+				$full_url = 'http://api.sportradar.us/mlb-images-p2/usat'.$value."?api_key={$srapi}";
+				$uploaded_image_url = $aws_controller->upload_headshot_image($full_url,$name);
+				$cur = new PlayersHeadshot;
+				$cur->sr_image_id = $sr_image_id;
+				$cur->player_id = $existing_player->id;
+				$cur->url = $uploaded_image_url;
+	            $cur->size = $name;
+				if($cur->save()){
+					$rows_created++;
+				}
+			}
+			//now that we have all of the originals uploaded, I want to add some new sizes as well.
+			/*$sizes = array(1000,500);
+			foreach($sizes as $size){
+				$full_url = 'http://api.sportradar.us/mlb-images-p2/usat'.$headshots['org']."?api_key={$srapi}";
+				$uploaded_image_url = $aws_controller->upload_headshot_image($full_url,$size,$size);
+				$cur = new PlayersHeadshot;
+				$cur->sr_image_id = $sr_image_id;
+				$cur->player_id = $existing_player->id;
+				$cur->url = $uploaded_image_url;
+	            $cur->size = $size;
+				if($cur->save()){
+					$rows_created++;
+				}
+			}*/
+		}
+		$ret = array(
+			"rows_created"=>$rows_created,
+			"rows_removed"=>$rows_removed,
+			'sr_player_id_count'=>count($sr_player_id_count),
+			'player_id_count'=>count($player_id_count)
+        );
+		DB::table('temp_log')->insert(
+            ['value' => 'Update player headshots finished at: '.gmdate('Y-m-d H:i:s',strtotime('now')),'value_2'=>$ret]
+        );
+        die(json_encode($ret));    
 	}
 }
